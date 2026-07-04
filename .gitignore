@@ -1,0 +1,37 @@
+# DataSense AI — .gitignore
+
+# ── Secrets ──────────────────────────────────────────────────────────
+.env
+*.pem
+*.key
+secrets.toml
+.streamlit/secrets.toml
+
+# ── Python ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+dist/
+build/
+*.so
+
+# ── Data files (never commit user data) ──────────────────────────────
+uploads/
+*.csv
+*.xlsx
+*.parquet
+*.pkl
+*.joblib
+
+# ── OS / editor ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ── Docker ───────────────────────────────────────────────────────────
+postgres_data/

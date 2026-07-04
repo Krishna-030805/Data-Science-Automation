@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  # ── DataSense AI Streamlit App ──────────────────────────────────────
+  app:
+    build: .
+    container_name: datasense_app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads  # Persist uploaded files
+
+  # ── PostgreSQL Database ─────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: datasense_db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: datasense
+      POSTGRES_USER: ${POSTGRES_USER:-datasense}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-datasense}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Nginx Reverse Proxy (optional, for custom domain + SSL) ─────────
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: datasense_nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - app
+
+volumes:
+  postgres_data:
