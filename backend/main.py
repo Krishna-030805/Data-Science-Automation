@@ -17,6 +17,7 @@ from core.data_miner import profile_columns, detect_outliers_iqr, detect_outlier
 from core.ml_engine import detect_task, train_classification, train_regression, run_clustering, get_feature_importance, pick_best_model, tune_best_model, get_cv_scores
 from core.insight_generator import build_full_insight_list, generate_hypothesis_verdict
 from core.llm_engine import profiler_agent, setup_gemini
+from config import CLASSIFICATION_MODELS, REGRESSION_MODELS
 
 # Initialize Gemini if key is in env
 if os.environ.get("GEMINI_API_KEY"):
@@ -252,10 +253,10 @@ def run_train(req: TrainRequest):
         raise HTTPException(status_code=400, detail=f"Failed to prepare data: {e}")
         
     if ml_task == "classification":
-        results = train_classification(df, req.target_col)
+        results = train_classification(df, req.target_col, list(CLASSIFICATION_MODELS.keys()))
         best, best_model_obj = pick_best_model(results, ml_task)
     elif ml_task == "regression":
-        results = train_regression(df, req.target_col)
+        results = train_regression(df, req.target_col, list(REGRESSION_MODELS.keys()))
         best, best_model_obj = pick_best_model(results, ml_task)
     elif ml_task == "clustering":
         results = run_clustering(df)
