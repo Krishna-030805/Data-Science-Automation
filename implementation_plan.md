@@ -1,53 +1,55 @@
-# Implementation Plan - Enterprise SaaS UI/UX Overhaul
+# Implementation Plan - Next.js + FastAPI Migration
 
-Based on the feedback, the current Streamlit UI feels like a basic data app rather than a professional, tier-1 SaaS product (like Vercel, Linear, or Datadog). This plan outlines a complete structural and aesthetic overhaul to push the platform's UI to enterprise SaaS standards, moving entirely away from default Streamlit visual paradigms.
+We are going to migrate DataSense AI from a single Streamlit script into a professional, decoupled architecture. Since this is your first time with Next.js, we will build this step-by-step. Don't worry—I will handle the heavy lifting of writing the code, and I'll explain how it all connects.
+
+## Goal Description
+Transition the application to a modern SaaS stack:
+1. **Backend (Python + FastAPI)**: We will keep your existing AI and Data Science logic exactly as it is, but wrap it in an API so the frontend can request data from it.
+2. **Frontend (Next.js + React)**: We will create a brand new web interface with ultra-smooth animations, glowing metrics, and responsive layouts that look like a premium product.
 
 ## User Review Required
 
-> [!IMPORTANT]  
-> This requires completely gutting the existing CSS in `app.py` and replacing standard Streamlit UI elements (metrics, standard alerts, basic text layouts) with highly customized HTML/JS components and advanced CSS grids.
-> **Note:** Streamlit has structural limitations, but we can override almost everything using `st.components.v1.html` and aggressive CSS injection.
+> [!IMPORTANT]
+> This requires a significant restructuring of our folders. We will split the project into two distinct parts: a `backend/` folder for Python and a `frontend/` folder for Next.js.
+
+> [!NOTE]
+> Since you are new to Next.js, we will start with a very simple UI foundation, using **TailwindCSS** for styling and **Framer Motion** for those popping numbers and smooth animations.
+
+## Open Questions
+
+1. Do you have `Node.js` installed on your Windows machine? (We will need it to run the Next.js frontend). If not, we can easily install it.
+2. Are you comfortable with me running terminal commands to scaffold the new Next.js project for you?
 
 ## Proposed Changes
 
-### 1. Global SaaS Design System (Linear / Vercel Aesthetic)
-#### [MODIFY] [app.py](file:///e:/codes/Codes/ds_automator/app.py)
-* **Typography**: Transition from IBM Plex to `Inter` or `Geist` for a hyper-modern, clean SaaS look.
-* **Color Palette**: Shift to a deep obsidian/pitch-black background (`#0A0A0A`) with subtle dark gray borders (`rgba(255,255,255,0.08)`) and high-contrast, vibrant accents (e.g., Neon Blue or Electric Violet).
-* **Layout Mechanics**: Implement max-width constraints, sticky headers, and unified padding to eliminate the "clunky script" feel.
-* **Sidebar Redesign**: Convert the sidebar into a sleek, collapsed/expandable icon-driven navigation bar with active-state highlighting and hover micro-animations.
+### Phase 1: Restructuring the Backend
+We will move the current `core/` logic into a new backend directory and replace `app.py` (Streamlit) with `main.py` (FastAPI).
 
-### 2. Bespoke UI Components (Replacing Streamlit Defaults)
-#### [NEW] [ui_components.py](file:///e:/codes/Codes/ds_automator/core/ui_components.py)
-To escape the "Streamlit look", we will build a library of custom HTML/JS widgets:
-* `saas_kpi_card(title, value, trend)`: A minimal, elegantly padded KPI card with subtle gradient borders and animated number counting.
-* `saas_radial_gauge(score, label)`: A polished SVG/Canvas circular progress indicator for Data Quality.
-* `saas_alert(message, type)`: Custom alert boxes replacing `st.info`/`st.warning` with clean borders and SaaS-style iconography.
-* `correlation_physics_universe(df)`: Retaining the interactive physics network, but styling it like a high-end data visualization tool (think Palantir/Datadog network maps).
+#### [NEW] [backend/main.py](file:///e:/codes/Codes/ds_automator/backend/main.py)
+* Create a FastAPI server that exposes our AI agents and data processing tools as REST endpoints.
+* Endpoints to create:
+  * `POST /upload`: Handles file uploads and returns the dataset overview.
+  * `POST /profile`: Triggers the profiler agent.
+  * `POST /train`: Triggers the ML engine.
 
-### 3. Page-by-Page Layout Refactoring
-#### [MODIFY] [upload.py](file:///e:/codes/Codes/ds_automator/pages/upload.py)
-* Replace default file uploader styling where possible.
-* Display dataset metrics in a sleek, horizontal CSS Grid of `saas_kpi_card`s.
-* Replace the `st.dataframe` preview with a custom-styled container that feels integrated into the page rather than floating.
+#### [MODIFY] [core/](file:///e:/codes/Codes/ds_automator/core/)
+* Move the entire `core/` folder inside the new `backend/` directory.
 
-#### [MODIFY] [mining.py](file:///e:/codes/Codes/ds_automator/pages/mining.py)
-* Redesign the "Data Quality Score" into a hero section with the `saas_radial_gauge` and dynamic typography.
-* Group Outliers, Missing Values, and Profiling into expandable, sleek accordion panels or tabbed interfaces to reduce vertical scrolling fatigue.
+### Phase 2: Scaffolding the Frontend
+We will initialize a Next.js project inside a new `frontend/` directory.
 
-#### [MODIFY] [analysis.py](file:///e:/codes/Codes/ds_automator/pages/analysis.py) & [ml.py](file:///e:/codes/Codes/ds_automator/pages/ml.py)
-* Overhaul the statistical results and model comparisons. Instead of plain text and default metrics, present results in custom HTML tables and side-by-side comparison cards.
-* Upgrade Plotly chart templates to perfectly match the new SaaS dark theme (transparent backgrounds, unified grid lines, custom color sequences).
+#### [NEW] [frontend/](file:///e:/codes/Codes/ds_automator/frontend/)
+* I will run `npx create-next-app@latest frontend --typescript --tailwind --eslint --app` to generate the boilerplate.
+* We will install `framer-motion` for our smooth animations and number pop effects.
+* **Component Architecture**:
+  * We will build reusable animated components like `<AnimatedMetric />` and `<QualityGauge />`.
+  * We will recreate the layout with a sleek left-sidebar and a main content area.
 
-#### [MODIFY] [insights.py](file:///e:/codes/Codes/ds_automator/pages/insights.py)
-* Transform the final report into a beautifully typeset "Executive Dashboard" that looks ready for a board meeting.
+### Phase 3: Wiring it Together
+* We will connect the Next.js frontend to the FastAPI backend using standard HTTP requests (`fetch`).
+* When a user uploads a file on the stunning new frontend, it sends it to the Python backend, does the math, and returns the results to be animated on screen.
 
 ## Verification Plan
-
-### Automated Tests
-* Run `streamlit run app.py` to ensure no Python syntax or component import errors.
-
-### Manual Verification
-* **Aesthetic Check**: Verify that the background, typography, and borders align with modern SaaS principles (no harsh lines, proper whitespace, consistent fonts).
-* **Component Rendering**: Check that the custom `saas_kpi_card` and `saas_radial_gauge` render correctly across the application and scale appropriately.
-* **Responsiveness**: Ensure the new injected CSS Grid/Flexbox layouts adapt gracefully to different screen sizes.
+1. **Start the Backend**: Run the FastAPI server (`uvicorn main:app --reload`) and verify endpoints respond via browser/swagger.
+2. **Start the Frontend**: Run the Next.js development server (`npm run dev`) and ensure the beautiful new UI loads.
+3. **End-to-End Test**: Upload a dataset from the new web UI, ensure Python processes it, and verify the frontend animates the incoming statistics perfectly.
