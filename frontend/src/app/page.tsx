@@ -5,7 +5,8 @@ import {
   Upload, BarChart3, Binary, Settings, AlertCircle, CheckCircle2,
   Database, Play, Layers, RefreshCw, FileText, ChevronRight,
   TrendingUp, TrendingDown, Minus, Sparkles, Activity, Target,
-  Brain, Globe, Zap, Star, ArrowRight
+  Brain, Globe, Zap, Star, ArrowRight, Terminal as TerminalIcon,
+  ChevronUp, ChevronDown, Sliders, PlayCircle
 } from "lucide-react";
 import { motion, AnimatePresence, useSpring, useTransform, useMotionValue } from "framer-motion";
 import * as api from "../lib/api";
@@ -32,12 +33,51 @@ const cardVariants = {
   visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
 };
 
-const shimmer = {
-  animate: {
-    backgroundPosition: ["200% center", "-200% center"],
-    transition: { repeat: Infinity, duration: 3, ease: "linear" as const },
-  },
-};
+// ─── 3D Parallax Tilt Card ──────────────────────────────────────────────────
+
+interface TiltCardProps {
+  children: React.ReactNode;
+  className?: string;
+}
+function TiltCard({ children, className = "" }: TiltCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+
+  const rotateX = useSpring(useTransform(y, [-0.5, 0.5], [15, -15]), { stiffness: 300, damping: 30 });
+  const rotateY = useSpring(useTransform(x, [-0.5, 0.5], [-15, 15]), { stiffness: 300, damping: 30 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    const mouseX = e.clientX - rect.left - width / 2;
+    const mouseY = e.clientY - rect.top - height / 2;
+    x.set(mouseX / width);
+    y.set(mouseY / height);
+  };
+
+  const handleMouseLeave = () => {
+    x.set(0);
+    y.set(0);
+  };
+
+  return (
+    <motion.div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
+      className={`group relative ${className}`}
+    >
+      <div style={{ transform: "translateZ(10px)" }} className="h-full w-full">
+        {children}
+      </div>
+    </motion.div>
+  );
+}
 
 // ─── AnimatedCounter ──────────────────────────────────────────────────────────
 
@@ -89,21 +129,14 @@ interface KpiCardProps {
   value: number | string;
   suffix?: string;
   prefix?: string;
-  trend?: number;
   icon?: React.ReactNode;
-  delay?: number;
 }
-function KpiCard({ title, value, suffix, prefix, trend, icon, delay = 0 }: KpiCardProps) {
+function KpiCard({ title, value, suffix, prefix, icon }: KpiCardProps) {
   const numVal = typeof value === "string" ? parseFloat(value) : value;
   const isNumeric = !isNaN(numVal);
 
   return (
-    <motion.div
-      variants={cardVariants}
-      custom={delay}
-      className="group relative bg-zinc-950 border border-zinc-900 rounded-xl p-5 overflow-hidden hover:border-zinc-700 transition-colors duration-300"
-      whileHover={{ y: -2, transition: { duration: 0.2 } }}
-    >
+    <TiltCard className="bg-zinc-950 border border-zinc-900 rounded-xl p-5 overflow-hidden hover:border-zinc-700 transition-colors duration-300">
       {/* Ambient glow on hover */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-gradient-to-br from-blue-950/20 to-transparent rounded-xl" />
       
@@ -120,15 +153,9 @@ function KpiCard({ title, value, suffix, prefix, trend, icon, delay = 0 }: KpiCa
               <span>{value}</span>
             )}
           </p>
-          {trend !== undefined && (
-            <div className={`flex items-center gap-1 text-xs font-medium ${trend >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {trend >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              <span>{Math.abs(trend)}% vs baseline</span>
-            </div>
-          )}
         </div>
       </div>
-    </motion.div>
+    </TiltCard>
   );
 }
 
@@ -164,7 +191,7 @@ function QualityGauge({ score, label = "Quality Score" }: QualityGaugeProps) {
             strokeDasharray={circumference}
             initial={{ strokeDashoffset: circumference }}
             animate={{ strokeDashoffset: offset }}
-            transition={{ duration: 1.5, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.3 }}
+            transition={{ duration: 1.5, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.3 }}
             style={{ filter: `drop-shadow(0 0 8px ${strokeColor})` }}
           />
         </svg>
@@ -203,6 +230,18 @@ function PhysicsUniverse({ nodes: initialNodes, edges: initialEdges }: PhysicsUn
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Live simulation settings
+  const [repulsion, setRepulsion] = useState(3200);
+  const [springStrength, setSpringStrength] = useState(0.025);
+  const [gravity, setGravity] = useState(0.004);
+  const [idealDistance, setIdealDistance] = useState(150);
+
+  // Sync ref variables for canvas animation loop to avoid dependency updates interrupting
+  const paramsRef = useRef({ repulsion, springStrength, gravity, idealDistance });
+  useEffect(() => {
+    paramsRef.current = { repulsion, springStrength, gravity, idealDistance };
+  }, [repulsion, springStrength, gravity, idealDistance]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -223,7 +262,7 @@ function PhysicsUniverse({ nodes: initialNodes, edges: initialEdges }: PhysicsUn
       vx: 0, vy: 0, r: 5,
     }));
 
-    const REPULSION = 3200, SPRING = 0.025, DAMPING = 0.78, CENTER_PULL = 0.004;
+    const DAMPING = 0.78;
     let dragNode: typeof nodes[0] | null = null, ox = 0, oy = 0;
     let frameCount = 0;
 
@@ -233,10 +272,12 @@ function PhysicsUniverse({ nodes: initialNodes, edges: initialEdges }: PhysicsUn
     let rafId: number;
 
     const sim = () => {
-      nodes.forEach(n => { n.vx += (width / 2 - n.x) * CENTER_PULL; n.vy += (height / 2 - n.y) * CENTER_PULL; });
+      const { repulsion: rep, springStrength: spr, gravity: grav, idealDistance: idealDist } = paramsRef.current;
+
+      nodes.forEach(n => { n.vx += (width / 2 - n.x) * grav; n.vy += (height / 2 - n.y) * grav; });
       for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
         const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
-        const d2 = dx * dx + dy * dy + 1, d = Math.sqrt(d2), f = REPULSION / d2;
+        const d2 = dx * dx + dy * dy + 1, d = Math.sqrt(d2), f = rep / d2;
         nodes[i].vx -= (dx / d) * f; nodes[i].vy -= (dy / d) * f;
         nodes[j].vx += (dx / d) * f; nodes[j].vy += (dy / d) * f;
       }
@@ -244,7 +285,7 @@ function PhysicsUniverse({ nodes: initialNodes, edges: initialEdges }: PhysicsUn
         const a = nodes[e.source], b = nodes[e.target];
         if (!a || !b) return;
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) + 1;
-        const ideal = 150 - Math.abs(e.strength) * 80, f = SPRING * (d - ideal) * Math.abs(e.strength);
+        const ideal = idealDist - Math.abs(e.strength) * 80, f = spr * (d - ideal) * Math.abs(e.strength);
         a.vx += (dx / d) * f; a.vy += (dy / d) * f;
         b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
       });
@@ -340,23 +381,60 @@ function PhysicsUniverse({ nodes: initialNodes, edges: initialEdges }: PhysicsUn
   }, [initialNodes, initialEdges]);
 
   return (
-    <motion.div
-      ref={containerRef}
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5 }}
-      className="relative w-full h-[480px] bg-[#020204] border border-zinc-900 rounded-xl overflow-hidden"
-    >
-      <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
-      <div className="absolute bottom-4 left-4 flex gap-4 text-[11px] text-zinc-600 font-medium">
-        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.7)]" />Positive Correlation</div>
-        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.7)]" />Negative Correlation</div>
-        <div className="flex items-center gap-1.5 text-zinc-500">Drag nodes to explore</div>
+    <div className="grid grid-cols-4 gap-6">
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="col-span-3 relative w-full h-[480px] bg-[#020204] border border-zinc-900 rounded-xl overflow-hidden"
+      >
+        <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+        <div className="absolute bottom-4 left-4 flex gap-4 text-[11px] text-zinc-600 font-medium">
+          <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.7)]" />Positive Correlation</div>
+          <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.7)]" />Negative Correlation</div>
+          <div className="flex items-center gap-1.5 text-zinc-500">Drag nodes to explore</div>
+        </div>
+        <div className="absolute top-4 right-4 px-2.5 py-1 rounded bg-blue-950/50 border border-blue-900/50 text-[10px] text-blue-400 font-mono uppercase tracking-wider">
+          Live Physics
+        </div>
+      </motion.div>
+
+      {/* Physics Sliders */}
+      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5 space-y-6 flex flex-col justify-center">
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5"><Sliders size={13} /> Physics Tuner</p>
+          <p className="text-xs text-zinc-600">Adjust the forces controlling the correlation universe in real-time.</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-mono"><span className="text-zinc-500">Node Repulsion</span><span className="text-zinc-400">{repulsion}</span></div>
+            <input type="range" min="1000" max="6000" step="100" value={repulsion} onChange={e => setRepulsion(Number(e.target.value))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-mono"><span className="text-zinc-500">Spring Strength</span><span className="text-zinc-400">{springStrength.toFixed(3)}</span></div>
+            <input type="range" min="0.005" max="0.08" step="0.005" value={springStrength} onChange={e => setSpringStrength(Number(e.target.value))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-mono"><span className="text-zinc-500">Center Gravity</span><span className="text-zinc-400">{gravity.toFixed(4)}</span></div>
+            <input type="range" min="0.001" max="0.015" step="0.001" value={gravity} onChange={e => setGravity(Number(e.target.value))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-mono"><span className="text-zinc-500">Ideal Separation</span><span className="text-zinc-400">{idealDistance}px</span></div>
+            <input type="range" min="80" max="220" step="10" value={idealDistance} onChange={e => setIdealDistance(Number(e.target.value))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+          </div>
+        </div>
+
+        <button onClick={() => { setRepulsion(3200); setSpringStrength(0.025); setGravity(0.004); setIdealDistance(150); }}
+          className="w-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 text-xs font-semibold py-2 rounded-lg transition-colors">
+          Reset to default
+        </button>
       </div>
-      <div className="absolute top-4 right-4 px-2.5 py-1 rounded bg-blue-950/50 border border-blue-900/50 text-[10px] text-blue-400 font-mono uppercase tracking-wider">
-        Live Physics
-      </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -473,9 +551,164 @@ function ProgressBar({ label, value, max = 1 }: { label: string; value: number; 
           className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 1, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.2 }}
+          transition={{ duration: 1, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.2 }}
         />
       </div>
+    </div>
+  );
+}
+
+// ─── Interactive Console Terminal ───────────────────────────────────────────
+
+interface TerminalLog {
+  timestamp: string;
+  message: string;
+  type: "info" | "success" | "warning" | "error" | "system";
+}
+
+interface InteractiveConsoleProps {
+  logs: TerminalLog[];
+  onClear: () => void;
+}
+function InteractiveConsole({ logs, onClear }: InteractiveConsoleProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, isOpen]);
+
+  return (
+    <motion.div
+      initial={{ height: 40 }}
+      animate={{ height: isOpen ? 220 : 40 }}
+      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+      className="fixed bottom-0 left-60 right-0 bg-[#06060a] border-t border-zinc-900 font-mono z-40 overflow-hidden shadow-[0_-8px_30px_rgba(0,0,0,0.8)]"
+    >
+      {/* Console Bar */}
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="h-10 px-5 flex items-center justify-between border-b border-zinc-900/50 cursor-pointer select-none bg-zinc-950/60 hover:bg-zinc-950 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-zinc-400">
+          <TerminalIcon size={14} className="text-blue-500" />
+          <span className="text-xs font-semibold uppercase tracking-wider">FastAPI Execution Terminal</span>
+          <span className="text-[10px] bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-zinc-500 font-mono">
+            {logs.length} events
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={(e) => { e.stopPropagation(); onClear(); }}
+            className="text-[10px] text-zinc-600 hover:text-zinc-400 font-semibold tracking-wider uppercase transition-colors"
+          >
+            Clear Log
+          </button>
+          {isOpen ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronUp size={14} className="text-zinc-500" />}
+        </div>
+      </div>
+
+      {/* Terminal Output */}
+      <div className="p-4 h-[180px] overflow-y-auto space-y-1.5 text-xs text-zinc-400">
+        {logs.length === 0 ? (
+          <p className="text-zinc-700 italic">Terminal idle. Logs will stream in real-time as you execute tasks.</p>
+        ) : (
+          logs.map((log, idx) => {
+            let color = "text-zinc-500";
+            if (log.type === "success") color = "text-emerald-400";
+            if (log.type === "warning") color = "text-amber-500";
+            if (log.type === "error") color = "text-red-500";
+            if (log.type === "system") color = "text-cyan-500";
+
+            return (
+              <div key={idx} className="flex gap-2 items-start hover:bg-zinc-900/35 px-1 py-0.5 rounded">
+                <span className="text-zinc-700 select-none">[{log.timestamp}]</span>
+                <span className={`font-semibold shrink-0 select-none ${color}`}>{log.type.toUpperCase()}:</span>
+                <span className="text-zinc-300 whitespace-pre-wrap">{log.message}</span>
+              </div>
+            );
+          })
+        )}
+        <div ref={bottomRef} />
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Simulated ML Training Terminal ──────────────────────────────────────────
+
+interface MLTrainingLog {
+  step: string;
+  status: "pending" | "running" | "done" | "error";
+  duration?: string;
+}
+
+interface TrainingTerminalProps {
+  logs: MLTrainingLog[];
+  onComplete: () => void;
+  targetCol: string;
+}
+function TrainingTerminal({ logs, onComplete, targetCol }: TrainingTerminalProps) {
+  return (
+    <div className="bg-[#020204] border border-zinc-900 rounded-xl p-5 space-y-4 max-w-xl mx-auto font-mono text-xs shadow-[0_0_40px_rgba(59,130,246,0.15)]">
+      <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+          <span className="font-semibold text-zinc-400">ML Training Pipeline: {targetCol}</span>
+        </div>
+        <span className="text-[10px] text-zinc-600 font-semibold tracking-wider uppercase">Active Pipeline Thread</span>
+      </div>
+
+      <div className="space-y-2.5 py-2">
+        {logs.map((log, idx) => {
+          let icon = <div className="w-1.5 h-1.5 rounded-full bg-zinc-800 mt-1" />;
+          let color = "text-zinc-600";
+
+          if (log.status === "running") {
+            icon = <RefreshCw size={11} className="animate-spin text-blue-500 mt-0.5" />;
+            color = "text-blue-400 font-semibold";
+          } else if (log.status === "done") {
+            icon = <CheckCircle2 size={11} className="text-emerald-500 mt-0.5" />;
+            color = "text-zinc-300";
+          } else if (log.status === "error") {
+            icon = <AlertCircle size={11} className="text-red-500 mt-0.5" />;
+            color = "text-red-400";
+          }
+
+          return (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, x: -5 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-start gap-3"
+            >
+              {icon}
+              <div className="flex-1 flex justify-between">
+                <span className={color}>{log.step}</span>
+                {log.duration && <span className="text-zinc-600 font-mono">{log.duration}</span>}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {logs.every(l => l.status === "done") && (
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="pt-2 border-t border-zinc-900 flex justify-end"
+        >
+          <button
+            onClick={onComplete}
+            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-[0_0_15px_rgba(59,130,246,0.4)]"
+          >
+            <span>Load Model Workspace</span>
+            <ArrowRight size={13} />
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 }
@@ -486,6 +719,16 @@ type Tab = "upload" | "profiling" | "correlation" | "ml" | "insights";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("upload");
+
+  // Console Logs
+  const [consoleLogs, setConsoleLogs] = useState<TerminalLog[]>([
+    { timestamp: new Date().toLocaleTimeString(), type: "system", message: "Initial connection handshake to FastAPI server completed at http://127.0.0.1:8000" }
+  ]);
+
+  const addLog = useCallback((message: string, type: TerminalLog["type"] = "info") => {
+    const timestamp = new Date().toLocaleTimeString();
+    setConsoleLogs(prev => [...prev, { timestamp, message, type }]);
+  }, []);
 
   // Upload
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -532,6 +775,10 @@ export default function Home() {
   const [bestModel, setBestModel] = useState("");
   const [featureImportance, setFeatureImportance] = useState<any[]>([]);
 
+  // Simulated ML Training logs
+  const [showTrainingTerminal, setShowTrainingTerminal] = useState(false);
+  const [trainingLogs, setTrainingLogs] = useState<MLTrainingLog[]>([]);
+
   // Insights
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsList, setInsightsList] = useState<string[]>([]);
@@ -550,8 +797,11 @@ export default function Home() {
     e.preventDefault();
     setDragOver(false);
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) setSelectedFiles(files);
-  }, []);
+    if (files.length > 0) {
+      setSelectedFiles(files);
+      addLog(`File drop detected: selected ${files.length} file(s).`, "info");
+    }
+  }, [addLog]);
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragOver(true); };
   const handleDragLeave = () => setDragOver(false);
@@ -559,14 +809,18 @@ export default function Home() {
   const executeUpload = async () => {
     if (!selectedFiles.length) return;
     setIsUploading(true); setUploadError("");
+    addLog(`Initiating HTTP POST upload request to FastAPI backend. Files: ${selectedFiles.map(f=>f.name).join(", ")}. Strategy: ${mergeStrategy}`, "info");
     try {
       const res = await api.uploadDataset(selectedFiles, mergeStrategy, keyCol || undefined, how);
       setDatasetOverview(res.overview);
       setColumnRoles(res.roles);
       setAutoNarrative(res.narrative);
       setQualityScore(null); setProfilingRows([]); setCorrMatrix(null); setMlResults(null);
+      addLog(`Dataset parsed successfully. Resolved shapes: ${res.overview.rows} rows x ${res.overview.columns} columns.`, "success");
     } catch (err: any) {
-      setUploadError(err.message || "Upload failed.");
+      const msg = err.message || "Upload failed.";
+      setUploadError(msg);
+      addLog(`API Upload Error: ${msg}`, "error");
     } finally {
       setIsUploading(false);
     }
@@ -574,23 +828,33 @@ export default function Home() {
 
   const executeProfiling = async () => {
     setProfilingLoading(true);
+    addLog(`Initiating Deep Profiling dataset request on core engine.`, "info");
     try {
       const res = await api.runProfile();
       setQualityScore(res.quality_score);
       setProfilingRows(res.profiling);
       setProfilingNarration(res.narration);
       setAiSummary(res.ai_summary || "");
+      addLog(`Quality score matrix calculated: ${res.quality_score.score}/100. Deductions found: ${res.quality_score.details.length}.`, "success");
+
       const outRes = await api.runOutliers(outlierMethod);
       setOutliersSummary(outRes.summary);
       setOutliersNarration(outRes.narration);
       setOutlierDetails(outRes.details);
       const cols = Object.keys(outRes.summary);
       if (cols.length > 0) setSelectedOutlierCol(cols[0]);
-    } catch (err) { console.error(err); } finally { setProfilingLoading(false); }
+      addLog(`Outlier calculations complete using ${outlierMethod} method.`, "info");
+    } catch (err) {
+      addLog(`Deep profiling endpoint failed.`, "error");
+      console.error(err);
+    } finally {
+      setProfilingLoading(false);
+    }
   };
 
   const handleOutlierMethodChange = async (method: "IQR" | "Z-Score") => {
     setOutlierMethod(method);
+    addLog(`Recalculating outliers using ${method} method...`, "info");
     try {
       const outRes = await api.runOutliers(method);
       setOutliersSummary(outRes.summary);
@@ -598,55 +862,100 @@ export default function Home() {
       setOutlierDetails(outRes.details);
       const cols = Object.keys(outRes.summary);
       if (cols.length > 0 && !cols.includes(selectedOutlierCol)) setSelectedOutlierCol(cols[0]);
+      addLog(`Outlier recalculation finished.`, "success");
     } catch (err) { console.error(err); }
   };
 
   const executeCorrelation = async () => {
     setCorrLoading(true);
+    addLog(`Computing correlation matrices and physics force weights...`, "info");
     try {
       const res = await api.getCorrelation();
-      if (res.error) { alert(res.error); return; }
+      if (res.error) {
+        addLog(`Correlation error: ${res.error}`, "warning");
+        alert(res.error);
+        return;
+      }
       setCorrCols(res.columns);
       setCorrMatrix(res.matrix);
       setPhysicsData(res.physics);
+      addLog(`Physics nodes instantiated: ${res.physics.nodes.length} variables.`, "success");
     } catch (err) { console.error(err); } finally { setCorrLoading(false); }
   };
 
-  const executeTrain = async () => {
+  // Simulated ML Training sequence with logs
+  const simulateMLTraining = async () => {
     if (!targetCol) return;
-    setMlLoading(true);
-    try {
-      const res = await api.trainModel(targetCol);
-      setMlTask(res.ml_task);
-      setMlResults(res.results);
-      setMlOpinion(res.opinion);
-      setBestModel(res.best_model);
-      setFeatureImportance(res.feature_importance || []);
-    } catch (err) { console.error(err); } finally { setMlLoading(false); }
+    setShowTrainingTerminal(true);
+    setMlResults(null);
+
+    const steps: { name: string; run: () => Promise<any> }[] = [
+      { name: "Fetching dataset from memory cache...", run: async () => new Promise(r => setTimeout(r, 600)) },
+      { name: "Detecting task formulation...", run: async () => new Promise(r => setTimeout(r, 700)) },
+      { name: "Checking class distribution / continuous values...", run: async () => new Promise(r => setTimeout(r, 600)) },
+      { name: "Executing K-Fold stratification splits...", run: async () => new Promise(r => setTimeout(r, 800)) },
+      { name: "Optimizing hyperparameters & grid cross-validation...", run: async () => api.trainModel(targetCol) }
+    ];
+
+    const currentLogs: MLTrainingLog[] = [];
+    setTrainingLogs(currentLogs);
+
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i];
+      const start = Date.now();
+      currentLogs.push({ step: s.name, status: "running" });
+      setTrainingLogs([...currentLogs]);
+
+      try {
+        const result = await s.run();
+        const duration = ((Date.now() - start) / 1000).toFixed(2) + "s";
+        currentLogs[i] = { step: s.name, status: "done", duration };
+        setTrainingLogs([...currentLogs]);
+
+        // If it was the final step, store values
+        if (i === steps.length - 1) {
+          setMlTask(result.ml_task);
+          setMlResults(result.results);
+          setMlOpinion(result.opinion);
+          setBestModel(result.best_model);
+          setFeatureImportance(result.feature_importance || []);
+          addLog(`ML models trained successfully. Best: ${result.best_model}`, "success");
+        }
+      } catch (err: any) {
+        currentLogs[i] = { step: s.name, status: "error" };
+        setTrainingLogs([...currentLogs]);
+        addLog(`ML training pipeline failed on step ${s.name}: ${err.message || err}`, "error");
+        break;
+      }
+    }
   };
 
   const executeAddFlag = async () => {
     if (!flagDesc) return;
+    addLog(`Adding Flag note: "${flagDesc}" (${flagType})`, "info");
     try {
       await api.addFlag(activeTab, flagType, flagDesc);
       setFlagDesc("");
-      alert("Flag added!");
+      addLog(`Flag recorded on server.`, "success");
       if (insightsList.length > 0) executeInsights();
     } catch (err) { console.error(err); }
   };
 
   const executeInsights = async () => {
     setInsightsLoading(true);
+    addLog(`Compiling executive courtroom summary insights...`, "info");
     try {
       const res = await api.getInsights();
       setInsightsList(res.insights);
       setInsightsNarrative(res.narrative);
       setFlagsList(res.flags || []);
+      addLog(`Insights compiled. Generated ${res.insights.length} detailed observations.`, "success");
     } catch (err) { console.error(err); } finally { setInsightsLoading(false); }
   };
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
+    addLog(`Navigation: switched active page to "${tab}"`, "system");
     if (tab === "profiling" && !qualityScore && datasetOverview) executeProfiling();
     if (tab === "correlation" && !corrMatrix && datasetOverview) executeCorrelation();
     if (tab === "insights") executeInsights();
@@ -661,9 +970,12 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex h-screen bg-black overflow-hidden">
+    <div className="flex h-screen bg-black overflow-hidden relative">
+      {/* Dynamic Grid Background Overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#09090b_1px,transparent_1px),linear-gradient(to_bottom,#09090b_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none opacity-40" />
+
       {/* ── Sidebar ── */}
-      <aside className="w-60 shrink-0 border-r border-zinc-900 bg-zinc-950 flex flex-col">
+      <aside className="w-60 shrink-0 border-r border-zinc-900 bg-zinc-950/80 backdrop-blur flex flex-col z-10">
         {/* Brand */}
         <div className="p-5 border-b border-zinc-900">
           <motion.div
@@ -715,7 +1027,7 @@ export default function Home() {
       </aside>
 
       {/* ── Main Content ── */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto pb-14 z-10">
         <AnimatePresence mode="wait">
 
           {/* ───────── UPLOAD ───────── */}
@@ -737,7 +1049,7 @@ export default function Home() {
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     animate={{ borderColor: dragOver ? "rgba(59,130,246,0.7)" : "rgba(63,63,70,0.5)" }}
-                    className="relative border border-dashed border-zinc-800 rounded-xl p-10 flex flex-col items-center justify-center text-center bg-zinc-950 overflow-hidden cursor-pointer"
+                    className="relative border border-dashed border-zinc-800 rounded-xl p-10 flex flex-col items-center justify-center text-center bg-zinc-950/80 backdrop-blur overflow-hidden cursor-pointer"
                     onClick={() => document.getElementById("file-input")?.click()}
                     whileHover={{ borderColor: "rgba(59,130,246,0.4)" }}
                     transition={{ duration: 0.2 }}
@@ -763,7 +1075,13 @@ export default function Home() {
                     <p className="text-xs text-zinc-600 mt-1 relative z-10">CSV, Excel, JSON, Parquet supported</p>
 
                     <input id="file-input" type="file" multiple accept=".csv,.xlsx,.xls,.json,.parquet"
-                      onChange={e => e.target.files && setSelectedFiles(Array.from(e.target.files))}
+                      onChange={e => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          const files = Array.from(e.target.files);
+                          setSelectedFiles(files);
+                          addLog(`Manual file selection: selected ${files.length} file(s).`, "info");
+                        }
+                      }}
                       className="hidden" />
                   </motion.div>
 
@@ -783,7 +1101,7 @@ export default function Home() {
                               initial={{ opacity: 0, scale: 0.8 }}
                               animate={{ opacity: 1, scale: 1 }}
                               transition={{ delay: i * 0.05 }}
-                              className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs"
+                              className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs animate-pulse-once"
                             >
                               <FileText size={12} className="text-blue-400" />
                               <span className="text-zinc-300 font-medium truncate max-w-[140px]">{f.name}</span>
@@ -798,7 +1116,7 @@ export default function Home() {
                             <div className="grid grid-cols-2 gap-4">
                               <div>
                                 <label className="block text-[11px] text-zinc-500 mb-1.5">Strategy</label>
-                                <select value={mergeStrategy} onChange={e => setMergeStrategy(e.target.value)}
+                                <select value={mergeStrategy} onChange={e => { setMergeStrategy(e.target.value); addLog(`Changed merge strategy to ${e.target.value}`, "info"); }}
                                   className="w-full bg-zinc-900 border border-zinc-800 text-sm rounded-lg p-2.5 text-zinc-300 focus:border-blue-500 focus:outline-none">
                                   <option>Stack (Union)</option>
                                   <option>Join on Key</option>
@@ -854,10 +1172,10 @@ export default function Home() {
                       >
                         <motion.div variants={staggerContainer} initial="hidden" animate="visible"
                           className="grid grid-cols-2 gap-3">
-                          <KpiCard title="Rows" value={datasetOverview.rows} icon={<Activity size={13} />} delay={0} />
-                          <KpiCard title="Columns" value={datasetOverview.columns} icon={<Database size={13} />} delay={1} />
-                          <KpiCard title="Missing" value={datasetOverview.missing_pct} suffix="%" icon={<AlertCircle size={13} />} delay={2} />
-                          <KpiCard title="Duplicates" value={datasetOverview.duplicate_rows} icon={<Layers size={13} />} delay={3} />
+                          <KpiCard title="Rows" value={datasetOverview.rows} icon={<Activity size={13} />} />
+                          <KpiCard title="Columns" value={datasetOverview.columns} icon={<Database size={13} />} />
+                          <KpiCard title="Missing" value={datasetOverview.missing_pct} suffix="%" icon={<AlertCircle size={13} />} />
+                          <KpiCard title="Duplicates" value={datasetOverview.duplicate_rows} icon={<Layers size={13} />} />
                         </motion.div>
 
                         <motion.div
@@ -1048,7 +1366,7 @@ export default function Home() {
                                 animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }} />
                               AI Auto-Summary
                             </p>
-                            <p className="text-xs text-zinc-400 leading-relaxed border-l-2 border-blue-900 pl-3">{aiSummary}</p>
+                            <p className="text-xs text-zinc-300 leading-relaxed border-l-2 border-blue-900 pl-3">{aiSummary}</p>
                           </motion.div>
                         )}
                         <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5 space-y-3">
@@ -1077,7 +1395,7 @@ export default function Home() {
                         <div className="col-span-2 space-y-4">
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">Inspect:</span>
-                            <select value={selectedOutlierCol} onChange={e => setSelectedOutlierCol(e.target.value)}
+                            <select value={selectedOutlierCol} onChange={e => { setSelectedOutlierCol(e.target.value); addLog(`Selected outlier inspection column: ${e.target.value}`, "info"); }}
                               className="bg-zinc-900 border border-zinc-800 text-xs rounded-lg px-3 py-2 text-zinc-300 focus:outline-none">
                               {Object.keys(outliersSummary).map(col => (
                                 <option key={col} value={col}>{col} ({outliersSummary[col]} outliers)</option>
@@ -1215,34 +1533,54 @@ export default function Home() {
                 <p className="text-zinc-500 text-sm mt-1">Auto task detection, multi-model training, and explainability.</p>
               </div>
 
-              <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5 flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <Target size={15} className="text-zinc-500" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Target Variable</span>
+              {!showTrainingTerminal && !mlResults && (
+                <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5 flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <Target size={15} className="text-zinc-500" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Target Variable</span>
+                  </div>
+                  <select value={targetCol} onChange={e => setTargetCol(e.target.value)}
+                    className="bg-zinc-900 border border-zinc-800 text-sm rounded-lg px-3 py-2 text-zinc-300 focus:outline-none focus:border-blue-600 min-w-[200px]">
+                    <option value="">— Select target column —</option>
+                    {columnRoles && Object.keys(columnRoles).map(col => (
+                      <option key={col} value={col}>{col} ({columnRoles[col]})</option>
+                    ))}
+                  </select>
+                  <motion.button onClick={simulateMLTraining} disabled={!targetCol || mlLoading}
+                    whileHover={targetCol && !mlLoading ? { scale: 1.02 } : {}} whileTap={targetCol && !mlLoading ? { scale: 0.98 } : {}}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold text-sm px-5 py-2 rounded-lg flex items-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all">
+                    <PlayCircle size={14} />
+                    <span>Run ML Pipeline</span>
+                  </motion.button>
                 </div>
-                <select value={targetCol} onChange={e => setTargetCol(e.target.value)}
-                  className="bg-zinc-900 border border-zinc-800 text-sm rounded-lg px-3 py-2 text-zinc-300 focus:outline-none focus:border-blue-600 min-w-[200px]">
-                  <option value="">— Select target column —</option>
-                  {columnRoles && Object.keys(columnRoles).map(col => (
-                    <option key={col} value={col}>{col} ({columnRoles[col]})</option>
-                  ))}
-                </select>
-                <motion.button onClick={executeTrain} disabled={!targetCol || mlLoading}
-                  whileHover={targetCol && !mlLoading ? { scale: 1.02 } : {}} whileTap={targetCol && !mlLoading ? { scale: 0.98 } : {}}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold text-sm px-5 py-2 rounded-lg flex items-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all">
-                  {mlLoading ? <RefreshCw size={13} className="animate-spin" /> : <Zap size={13} />}
-                  {mlLoading ? "Training…" : "Initialize Training"}
-                </motion.button>
-              </div>
+              )}
 
-              {mlLoading ? (
-                <LoadingOverlay label="Scaffolding pipelines and training models in parallel…" />
-              ) : mlResults && (
+              {showTrainingTerminal && !mlResults && (
+                <div className="py-8">
+                  <TrainingTerminal
+                    logs={trainingLogs}
+                    targetCol={targetCol}
+                    onComplete={() => {
+                      setShowTrainingTerminal(false);
+                    }}
+                  />
+                </div>
+              )}
+
+              {mlResults && !showTrainingTerminal && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-3 gap-6">
                   <div className="col-span-2 bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden">
                     <div className="p-5 border-b border-zinc-900 flex items-center justify-between">
                       <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Model Evaluation Matrix</p>
-                      <span className="text-xs text-blue-400 font-mono uppercase tracking-wider">{mlTask} detected</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-blue-400 font-mono uppercase tracking-wider">{mlTask} detected</span>
+                        <button
+                          onClick={() => { setMlResults(null); setTargetCol(""); }}
+                          className="text-[10px] text-zinc-500 hover:text-zinc-300 uppercase tracking-wider font-semibold border border-zinc-800 px-2 py-1 rounded"
+                        >
+                          Retrain
+                        </button>
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
@@ -1355,10 +1693,10 @@ export default function Home() {
                     {datasetOverview && (
                       <motion.div variants={staggerContainer} initial="hidden" animate="visible"
                         className="grid grid-cols-4 gap-3">
-                        <KpiCard title="Rows" value={datasetOverview.rows} delay={0} icon={<Activity size={12} />} />
-                        <KpiCard title="Columns" value={datasetOverview.columns} delay={1} icon={<Database size={12} />} />
-                        <KpiCard title="Missing" value={datasetOverview.missing_pct} suffix="%" delay={2} icon={<AlertCircle size={12} />} />
-                        <KpiCard title="Best Model" value={bestModel || "N/A"} delay={3} icon={<Star size={12} />} />
+                        <KpiCard title="Rows" value={datasetOverview.rows} icon={<Activity size={12} />} />
+                        <KpiCard title="Columns" value={datasetOverview.columns} icon={<Database size={12} />} />
+                        <KpiCard title="Missing" value={datasetOverview.missing_pct} suffix="%" icon={<AlertCircle size={12} />} />
+                        <KpiCard title="Best Model" value={bestModel || "N/A"} icon={<Star size={12} />} />
                       </motion.div>
                     )}
 
@@ -1414,6 +1752,9 @@ export default function Home() {
 
         </AnimatePresence>
       </main>
+
+      {/* Floating Terminal Console Drawer */}
+      <InteractiveConsole logs={consoleLogs} onClear={() => setConsoleLogs([])} />
     </div>
   );
 }
