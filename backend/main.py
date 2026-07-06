@@ -254,10 +254,12 @@ def run_train(req: TrainRequest):
         
     if ml_task == "classification":
         results = train_classification(df, req.target_col, list(CLASSIFICATION_MODELS.keys()))
-        best, best_model_obj = pick_best_model(results, ml_task)
+        best = pick_best_model(results, ml_task)
+        best_model_obj = results.get(best, {}).get("model")
     elif ml_task == "regression":
         results = train_regression(df, req.target_col, list(REGRESSION_MODELS.keys()))
-        best, best_model_obj = pick_best_model(results, ml_task)
+        best = pick_best_model(results, ml_task)
+        best_model_obj = results.get(best, {}).get("model")
     elif ml_task == "clustering":
         results = run_clustering(df)
         best = "KMeans"
@@ -272,9 +274,9 @@ def run_train(req: TrainRequest):
         
     # Get feature importance if not clustering
     importance = []
-    if ml_task != "clustering" and best_model_obj:
+    if ml_task != "clustering" and best in results and not results[best].get("error"):
         try:
-            imp_df = get_feature_importance(best_model_obj, X_full.columns, ml_task)
+            imp_df = get_feature_importance(results[best], best)
             importance = imp_df.to_dict(orient="records")
         except Exception as e:
             print(f"Feature importance failed: {e}")
